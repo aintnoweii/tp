@@ -16,6 +16,7 @@ import seedu.address.model.TuiTracker;
 import seedu.address.model.enrollment.EnrollmentList;
 import seedu.address.model.lesson.UniqueLessonList;
 import seedu.address.model.student.Name;
+import seedu.address.model.student.Student;
 import seedu.address.model.student.UniqueStudentList;
 
 public class JsonSerializableTuiTrackerTest {
@@ -97,7 +98,10 @@ public class JsonSerializableTuiTrackerTest {
         TuiTracker fromFile = read("duplicateStudentsWithDifferentIds.json").toModelType();
 
         assertEquals(2, fromFile.getStudentList().size());
-        assertTrue(fromFile.getStudentList().get(0).isSameStudent(fromFile.getStudentList().get(1)));
+        Student first = fromFile.getStudentList().get(0);
+        Student second = fromFile.getStudentList().get(1);
+        assertTrue(first.getName().isSameName(second.getName()));
+        assertTrue(first.getContact().isSameContact(second.getContact()));
     }
 
     @Test
