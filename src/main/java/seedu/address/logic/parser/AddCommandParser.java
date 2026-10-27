@@ -12,7 +12,6 @@ import static seedu.address.logic.parser.CliSyntax.PREFIX_START_TIME;
 import static seedu.address.logic.parser.CliSyntax.PREFIX_STUDENT;
 import static seedu.address.logic.parser.CliSyntax.PREFIX_STUDENT_LEVEL;
 
-import java.math.BigInteger;
 import java.time.DayOfWeek;
 import java.time.LocalTime;
 import java.util.ArrayList;
@@ -69,15 +68,11 @@ public class AddCommandParser implements Parser<AddCommand> {
     public static final String MESSAGE_READ_AS_NEW = " %1$s%2$s was read as a new %3$s.";
     /** Added after {@link #MESSAGE_READ_AS_NEW} when the value starts with an ID followed by more text. */
     public static final String MESSAGE_USE_ID_ONLY = " To use an existing %1$s, give only its ID, such as %2$s%3$s.";
-    public static final String MESSAGE_ID_TOO_LARGE = ParserUtil.MESSAGE_ID_TOO_LARGE;
 
     private static final Logger logger = LogsCenter.getLogger(AddCommandParser.class);
 
     /** A number that is not a valid ID, such as {@code 0}, {@code -1}, {@code 1.5} or {@code #1}. */
     private static final Pattern LOOKS_LIKE_A_NUMBER = Pattern.compile("^[#+-]?\\d+([.,]\\d+)?$");
-
-    /** The largest ID a student or lesson can have. */
-    private static final BigInteger MAX_ID = BigInteger.valueOf(Integer.MAX_VALUE);
 
     /** An ID followed by a space and more text, such as {@code 2 extra words}. */
     private static final Pattern ID_THEN_TEXT = Pattern.compile("^(\\d+)\\s+\\S.*$");
@@ -121,10 +116,9 @@ public class AddCommandParser implements Parser<AddCommand> {
         String lessonValue = requiredValue(argMultimap, PREFIX_LESSON);
         checkNumberIsAnId(PREFIX_STUDENT, studentValue, "name");
         checkNumberIsAnId(PREFIX_LESSON, lessonValue, "subject");
-        checkIdNotTooLarge(studentValue);
-        checkIdNotTooLarge(lessonValue);
         boolean isNewStudent = !ParserUtil.isId(studentValue);
         boolean isNewLesson = !ParserUtil.isId(lessonValue);
+        checkIdFits(isNewStudent, isNewLesson, studentValue, lessonValue);
         logger.fine("Parsing add command: " + (isNewStudent ? "new" : "existing") + " student, "
                 + (isNewLesson ? "new" : "existing") + " lesson");
 
@@ -188,11 +182,17 @@ public class AddCommandParser implements Parser<AddCommand> {
     }
 
     /**
-     * Throws if {@code value} is an ID that is too large for any student or lesson to have.
+     * Throws if an ID is too large for any student or lesson to have. This parses the IDs early, with the shared
+     * rule in {@link ParserUtil}, so that such an ID is reported here like {@code s/0}, before the other checks.
+     * The IDs are parsed again when the command is built.
      */
-    private static void checkIdNotTooLarge(String value) throws ParseException {
-        if (ParserUtil.isId(value) && new BigInteger(value.trim()).compareTo(MAX_ID) > 0) {
-            throw new ParseException(MESSAGE_ID_TOO_LARGE);
+    private static void checkIdFits(boolean isNewStudent, boolean isNewLesson, String studentValue,
+            String lessonValue) throws ParseException {
+        if (!isNewStudent) {
+            ParserUtil.parseStudentId(studentValue);
+        }
+        if (!isNewLesson) {
+            ParserUtil.parseLessonId(lessonValue);
         }
     }
 

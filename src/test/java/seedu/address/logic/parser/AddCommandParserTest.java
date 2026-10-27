@@ -2,7 +2,6 @@ package seedu.address.logic.parser;
 
 import static seedu.address.logic.Messages.MESSAGE_DUPLICATE_PARAMETER;
 import static seedu.address.logic.Messages.MESSAGE_INVALID_COMMAND_FORMAT;
-import static seedu.address.logic.parser.AddCommandParser.MESSAGE_ID_TOO_LARGE;
 import static seedu.address.logic.parser.AddCommandParser.MESSAGE_LESSON_PARAMETERS_NOT_ALLOWED;
 import static seedu.address.logic.parser.AddCommandParser.MESSAGE_MISSING_PARAMETER_FORMAT;
 import static seedu.address.logic.parser.AddCommandParser.MESSAGE_NOT_AN_ID;
@@ -11,6 +10,7 @@ import static seedu.address.logic.parser.AddCommandParser.MESSAGE_READ_AS_NEW;
 import static seedu.address.logic.parser.AddCommandParser.MESSAGE_STUDENT_PARAMETERS_NOT_ALLOWED;
 import static seedu.address.logic.parser.CommandParserTestUtil.assertParseFailure;
 import static seedu.address.logic.parser.CommandParserTestUtil.assertParseSuccess;
+import static seedu.address.logic.parser.ParserUtil.MESSAGE_ID_TOO_LARGE;
 import static seedu.address.testutil.Assert.assertThrows;
 
 import java.time.DayOfWeek;
@@ -378,6 +378,13 @@ public class AddCommandParserTest {
     public void parse_idTooLarge_saysSo() {
         assertParseFailure(parser, " s/2147483648 l/2", MESSAGE_ID_TOO_LARGE);
         assertParseFailure(parser, " s/1 l/99999999999", MESSAGE_ID_TOO_LARGE);
+    }
+
+    @Test
+    public void parse_idTooLarge_reportedBeforeOtherProblems() {
+        assertParseFailure(parser, " s/2147483648 l/1 c/91234567", MESSAGE_ID_TOO_LARGE);
+        assertParseFailure(parser, " s/1 l/99999999999 d/Monday", MESSAGE_ID_TOO_LARGE);
+        assertParseFailure(parser, " s/99999999999 l/Art", MESSAGE_ID_TOO_LARGE);
     }
 
     @Test
