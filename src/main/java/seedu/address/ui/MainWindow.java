@@ -7,6 +7,7 @@ import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.TextInputControl;
+import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCombination;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.StackPane;
@@ -17,6 +18,7 @@ import seedu.address.logic.Logic;
 import seedu.address.logic.commands.CommandResult;
 import seedu.address.logic.commands.exceptions.CommandException;
 import seedu.address.logic.parser.exceptions.ParseException;
+import seedu.address.model.ListView;
 
 /**
  * The Main Window. Provides the basic application layout containing
@@ -33,9 +35,13 @@ public class MainWindow extends UiPart<Stage> {
     private Path dataFilePath;
 
     // Independent Ui parts residing in this Ui container
-    private PersonListPanel personListPanel;
+    private StudentListPanel studentListPanel;
+    private LessonListPanel lessonListPanel;
+    private SchedulePanel schedulePanel;
+    private CommandBox commandBox;
     private ResultDisplay resultDisplay;
     private HelpWindow helpWindow;
+    private PaymentMonthRefresher paymentMonthRefresher;
 
     @FXML
     private StackPane commandBoxPlaceholder;
@@ -44,7 +50,7 @@ public class MainWindow extends UiPart<Stage> {
     private MenuItem helpMenuItem;
 
     @FXML
-    private StackPane personListPanelPlaceholder;
+    private StackPane listPanelPlaceholder;
 
     @FXML
     private StackPane resultDisplayPlaceholder;
@@ -114,8 +120,14 @@ public class MainWindow extends UiPart<Stage> {
      * Fills up all the placeholders of this window.
      */
     void fillInnerParts() {
-        personListPanel = new PersonListPanel(logic.getFilteredPersonList());
-        personListPanelPlaceholder.getChildren().add(personListPanel.getRoot());
+        commandBox = new CommandBox(this::executeCommand);
+        studentListPanel = new StudentListPanel(logic.getStudentList(), logic);
+        lessonListPanel = new LessonListPanel(logic.getLessonList(), logic);
+        schedulePanel = new SchedulePanel(logic, commandBox::focus);
+        listPanelPlaceholder.getChildren().addAll(studentListPanel.getRoot(), lessonListPanel.getRoot(),
+                schedulePanel.getRoot());
+        showList(logic.listViewProperty().get());
+        logic.listViewProperty().addListener((observable, oldView, newView) -> showList(newView));
 
         resultDisplay = new ResultDisplay();
         resultDisplayPlaceholder.getChildren().add(resultDisplay.getRoot());
@@ -123,8 +135,20 @@ public class MainWindow extends UiPart<Stage> {
         StatusBarFooter statusBarFooter = new StatusBarFooter(dataFilePath);
         statusbarPlaceholder.getChildren().add(statusBarFooter.getRoot());
 
-        CommandBox commandBox = new CommandBox(this::executeCommand);
         commandBoxPlaceholder.getChildren().add(commandBox.getRoot());
+
+        getRoot().addEventFilter(KeyEvent.KEY_PRESSED, event -> {
+            if (event.getCode() == KeyCode.F6 && logic.listViewProperty().get() == ListView.SCHEDULE) {
+                schedulePanel.focusFirstDay();
+                event.consume();
+            }
+        });
+
+        paymentMonthRefresher = new PaymentMonthRefresher(() -> {
+            logic.refreshPaymentStatus();
+            studentListPanel.refresh();
+        });
+        paymentMonthRefresher.start();
     }
 
     /**
@@ -164,11 +188,33 @@ public class MainWindow extends UiPart<Stage> {
                 (int) primaryStage.getX(), (int) primaryStage.getY());
         logic.setGuiSettings(guiSettings);
         helpWindow.hide();
+        if (paymentMonthRefresher != null) {
+            paymentMonthRefresher.stop();
+        }
         primaryStage.hide();
     }
 
-    public PersonListPanel getPersonListPanel() {
-        return personListPanel;
+    /**
+     * Shows the selected student, lesson, or schedule panel.
+     */
+    private void showList(ListView listView) {
+        boolean showStudents = listView == ListView.STUDENTS;
+        boolean showLessons = listView == ListView.LESSONS;
+        boolean showSchedule = listView == ListView.SCHEDULE;
+        studentListPanel.getRoot().setVisible(showStudents);
+        studentListPanel.getRoot().setManaged(showStudents);
+        lessonListPanel.getRoot().setVisible(showLessons);
+        lessonListPanel.getRoot().setManaged(showLessons);
+        schedulePanel.getRoot().setVisible(showSchedule);
+        schedulePanel.getRoot().setManaged(showSchedule);
+    }
+
+    public StudentListPanel getStudentListPanel() {
+        return studentListPanel;
+    }
+
+    public LessonListPanel getLessonListPanel() {
+        return lessonListPanel;
     }
 
     /**
@@ -179,7 +225,12 @@ public class MainWindow extends UiPart<Stage> {
     private CommandResult executeCommand(String commandText) throws CommandException, ParseException {
         try {
             CommandResult commandResult = logic.execute(commandText);
-            logger.info("Result: " + commandResult.getFeedbackToUser());
+            logger.info("Command executed successfully");
+            studentListPanel.refresh();
+            lessonListPanel.refresh();
+            if (logic.listViewProperty().get() == ListView.SCHEDULE) {
+                schedulePanel.refresh();
+            }
             resultDisplay.setFeedbackToUser(commandResult.getFeedbackToUser());
 
             if (commandResult.isShowHelp()) {
@@ -192,7 +243,8 @@ public class MainWindow extends UiPart<Stage> {
 
             return commandResult;
         } catch (CommandException | ParseException e) {
-            logger.info("An error occurred while executing command: " + commandText);
+            // Only the kind of error is logged: an error message can repeat a name or contact number that was typed.
+            logger.info("A command could not be executed: " + e.getClass().getSimpleName());
             resultDisplay.setFeedbackToUser(e.getMessage());
             throw e;
         }

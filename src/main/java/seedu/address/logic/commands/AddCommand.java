@@ -1,63 +1,394 @@
 package seedu.address.logic.commands;
 
 import static java.util.Objects.requireNonNull;
-import static seedu.address.logic.parser.CliSyntax.PREFIX_ADDRESS;
-import static seedu.address.logic.parser.CliSyntax.PREFIX_EMAIL;
-import static seedu.address.logic.parser.CliSyntax.PREFIX_NAME;
-import static seedu.address.logic.parser.CliSyntax.PREFIX_PHONE;
-import static seedu.address.logic.parser.CliSyntax.PREFIX_TAG;
+import static seedu.address.commons.util.CollectionUtil.requireAllNonNull;
+import static seedu.address.logic.Messages.MESSAGE_LESSON_NOT_FOUND;
+import static seedu.address.logic.Messages.MESSAGE_STUDENT_NOT_FOUND;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.logging.Logger;
+
+import seedu.address.commons.core.LogsCenter;
 import seedu.address.commons.util.ToStringBuilder;
-import seedu.address.logic.Messages;
 import seedu.address.logic.commands.exceptions.CommandException;
 import seedu.address.model.Model;
-import seedu.address.model.person.Person;
+import seedu.address.model.common.Level;
+import seedu.address.model.lesson.Fee;
+import seedu.address.model.lesson.Lesson;
+import seedu.address.model.lesson.LessonId;
+import seedu.address.model.lesson.Subject;
+import seedu.address.model.lesson.Timeslot;
+import seedu.address.model.student.Contact;
+import seedu.address.model.student.Name;
+import seedu.address.model.student.Student;
+import seedu.address.model.student.StudentId;
 
 /**
- * Adds a person to the address book.
+ * Enrolls a student in a lesson, or creates a student or a lesson on its own. The student and the lesson can each be
+ * new or existing, and either can be left out if the other is new.
+ *
+ * <p>The command records what the user asked for: an existing record by ID, or the details of a new one. Nothing is
+ * created until {@link #execute(Model)} has checked that the whole request is valid. See specification codes ADD-1
+ * to ADD-15.
  */
 public class AddCommand extends Command {
 
     public static final String COMMAND_WORD = "add";
 
-    public static final String MESSAGE_USAGE = COMMAND_WORD + ": Adds a person to the address book. "
-            + "Parameters: "
-            + PREFIX_NAME + "NAME "
-            + PREFIX_PHONE + "PHONE "
-            + PREFIX_EMAIL + "EMAIL "
-            + PREFIX_ADDRESS + "ADDRESS "
-            + "[" + PREFIX_TAG + "TAG]...\n"
-            + "Example: " + COMMAND_WORD + " "
-            + PREFIX_NAME + "John Doe "
-            + PREFIX_PHONE + "98765432 "
-            + PREFIX_EMAIL + "johnd@example.com "
-            + PREFIX_ADDRESS + "311, Clementi Ave 2, #02-25 "
-            + PREFIX_TAG + "friends "
-            + PREFIX_TAG + "owesMoney";
+    public static final String MESSAGE_USAGE = COMMAND_WORD + " [s/STUDENT] [l/LESSON] [c/CONTACT slv/STUDENT_LEVEL] "
+            + "[llv/LESSON_LEVEL d/DAY st/START_TIME et/END_TIME f/FEE]";
 
-    public static final String MESSAGE_SUCCESS = "New person added: %1$s";
-    public static final String MESSAGE_DUPLICATE_PERSON = "This person already exists in the address book.";
+    public static final String MESSAGE_SUCCESS =
+            "Enrolled %1$s [Student ID: %2$s] in %3$s [Lesson ID: %4$s]. Payment status: %5$s.";
+    public static final String MESSAGE_ADDED_STUDENT = "Added student %1$s [Student ID: %2$s].";
+    public static final String MESSAGE_ADDED_LESSON = "Added lesson %1$s [Lesson ID: %2$s].";
+    public static final String MESSAGE_LESSON_NEEDED = "%1$s [Student ID: %2$s] already exists. To enroll them, "
+            + "add l/ with a lesson ID or the details of a new lesson.";
+    public static final String MESSAGE_STUDENT_NEEDED = "%1$s [Lesson ID: %2$s] already exists. To enroll a student "
+            + "in it, add s/ with a student ID or the details of a new student.";
+    public static final String MESSAGE_DUPLICATE_STUDENT = "A student with the same name and contact already "
+            + "exists (Student ID: %1$s). Use the existing student ID.";
+    public static final String MESSAGE_DUPLICATE_LESSON =
+            "An identical lesson already exists (Lesson ID: %1$s). Use the existing lesson ID.";
+    public static final String MESSAGE_ALREADY_ENROLLED = "The student is already enrolled in this lesson.";
+    public static final String MESSAGE_LESSON_CLASH = "Lesson clashes with lesson %1$s (%2$s, %3$s).";
+    public static final String MESSAGE_NOTE_SAME_NAME =
+            "Note: another student named %1$s already exists (Student ID: %2$s).";
+    public static final String MESSAGE_NOTE_LEVEL_MISMATCH =
+            "Note: %1$s's level (%2$s) differs from the lesson's level (%3$s).";
+    public static final String MESSAGE_NOTE_FREE_LESSON =
+            "Note: the fee is 0. Check that this lesson is meant to be free.";
 
-    private final Person toAdd;
+    private static final String PAID = "Paid";
+    private static final String UNPAID = "Unpaid";
+
+    private static final Logger logger = LogsCenter.getLogger(AddCommand.class);
+
+    // Either one is null when the command creates only the other. They are never both null.
+    private final StudentRef student;
+    private final LessonRef lesson;
 
     /**
-     * Creates an AddCommand to add the specified {@code Person}
+     * Creates a command that enrolls {@code student} in {@code lesson}.
      */
-    public AddCommand(Person person) {
-        requireNonNull(person);
-        toAdd = person;
+    public AddCommand(StudentRef student, LessonRef lesson) {
+        requireAllNonNull(student, lesson);
+        this.student = student;
+        this.lesson = lesson;
     }
 
+    /**
+     * Creates a command that creates {@code student} without enrolling them. If {@code student} already exists, the
+     * command asks for a lesson instead.
+     */
+    public AddCommand(StudentRef student) {
+        requireNonNull(student);
+        this.student = student;
+        this.lesson = null;
+    }
+
+    /**
+     * Creates a command that creates {@code lesson} without any student. If {@code lesson} already exists, the
+     * command asks for a student instead.
+     */
+    public AddCommand(LessonRef lesson) {
+        requireNonNull(lesson);
+        this.student = null;
+        this.lesson = lesson;
+    }
+
+    /**
+     * Enrolls the student in the lesson, creating the student and the lesson first if they are new. If only one of
+     * them was given, it is created without any enrollment.
+     * Every check runs before anything is created or changed, so a command that fails leaves everything as it was
+     * and uses up no ID. The first problem found is the one reported, in this order:
+     * <ol>
+     *   <li>the student exists, then the lesson exists (only for an existing student or lesson)</li>
+     *   <li>an existing student or lesson given on its own has the other side given too: there is nothing to
+     *       create</li>
+     *   <li>a new student is not a duplicate, then a new lesson is not a duplicate, then the student is not
+     *       already enrolled in the lesson (only possible when both already exist)</li>
+     *   <li>the student's level is the same as the lesson's level</li>
+     *   <li>a new lesson does not clash with an existing lesson</li>
+     * </ol>
+     * The duplicate check comes before the clash check because an identical lesson always overlaps the existing
+     * one, so the clash check would otherwise hide the more helpful duplicate message.
+     */
     @Override
     public CommandResult execute(Model model) throws CommandException {
         requireNonNull(model);
-
-        if (model.hasPerson(toAdd)) {
-            throw new CommandException(MESSAGE_DUPLICATE_PERSON);
+        logger.fine("Executing add command: " + describeReferences());
+        try {
+            return checkAndAdd(model);
+        } catch (OtherSideNeededException e) {
+            // The message names the student, so only the IDs are logged.
+            logger.info("Rejected add command: nothing to create for " + describeReferences());
+            throw e;
+        } catch (CommandException e) {
+            // A rejected command is the user's mistake and not a fault, so it is logged at info and not warning.
+            // These messages hold IDs, subjects and times, never names or contact numbers.
+            logger.info("Rejected add command: " + e.getMessage());
+            throw e;
         }
+    }
 
-        model.addPerson(toAdd);
-        return new CommandResult(String.format(MESSAGE_SUCCESS, Messages.format(toAdd)));
+    private CommandResult checkAndAdd(Model model) throws CommandException {
+        Optional<Student> existingStudent = findExistingStudent(model);
+        Optional<Lesson> existingLesson = findExistingLesson(model);
+        // A student or lesson is resolved exactly when it was referred to by ID; the steps below rely on this.
+        assert (student instanceof ExistingStudent) == existingStudent.isPresent()
+                : "An existing student must be found if, and only if, the student was given by ID";
+        assert (lesson instanceof ExistingLesson) == existingLesson.isPresent()
+                : "An existing lesson must be found if, and only if, the lesson was given by ID";
+
+        checkOtherSideGiven(existingStudent, existingLesson);
+        checkForDuplicates(model, existingStudent, existingLesson);
+        checkForClash(model);
+
+        // Notes point out what is probably a mistake but might be intended. They are worked out before anything is
+        // created, so that a new student is never reported as its own namesake.
+        List<String> notes = new ArrayList<>();
+        noteForNamesake(model).ifPresent(notes::add);
+        noteForLevelMismatch(existingStudent, existingLesson).ifPresent(notes::add);
+        noteForFreeLesson().ifPresent(notes::add);
+
+        // The whole request is valid, so create what is new and enroll.
+        if (lesson == null) {
+            Student created = createStudentIfNew(model, existingStudent);
+            return new CommandResult(withNotes(
+                    String.format(MESSAGE_ADDED_STUDENT, created.getName(), created.getId()), notes));
+        }
+        if (student == null) {
+            Lesson created = createLessonIfNew(model, existingLesson);
+            return new CommandResult(withNotes(
+                    String.format(MESSAGE_ADDED_LESSON, created.getSubject(), created.getId()), notes));
+        }
+        Student studentToEnroll = createStudentIfNew(model, existingStudent);
+        Lesson lessonToJoin = createLessonIfNew(model, existingLesson);
+        enroll(model, studentToEnroll, lessonToJoin);
+        return new CommandResult(successMessage(model, studentToEnroll, lessonToJoin, notes));
+    }
+
+    /**
+     * Throws if an existing student is given without a lesson, or an existing lesson without a student, since there
+     * is then nothing to create and no one to enroll.
+     */
+    private void checkOtherSideGiven(Optional<Student> existingStudent, Optional<Lesson> existingLesson)
+            throws CommandException {
+        if (lesson == null && existingStudent.isPresent()) {
+            Student found = existingStudent.get();
+            throw new OtherSideNeededException(String.format(MESSAGE_LESSON_NEEDED, found.getName(), found.getId()));
+        }
+        if (student == null && existingLesson.isPresent()) {
+            Lesson found = existingLesson.get();
+            throw new OtherSideNeededException(
+                    String.format(MESSAGE_STUDENT_NEEDED, found.getSubject(), found.getId()));
+        }
+    }
+
+    /**
+     * Returns a note if a new student has the same name as an existing student. The contact must differ, because a
+     * student with the same name and contact was already rejected as a duplicate.
+     */
+    private Optional<String> noteForNamesake(Model model) {
+        if (!(student instanceof NewStudent newStudent)) {
+            return Optional.empty();
+        }
+        return model.findStudentWithSameName(newStudent.name())
+                .map(namesake -> String.format(MESSAGE_NOTE_SAME_NAME, namesake.getName(), namesake.getId()));
+    }
+
+    /**
+     * Returns a note if the student's level is not the same as the lesson's level. A student may still join a
+     * lesson of another level, for example a stronger student in a higher-level class, so this is not an error.
+     * There is no note when only one of them is given.
+     */
+    private Optional<String> noteForLevelMismatch(Optional<Student> existingStudent, Optional<Lesson> existingLesson) {
+        if (student == null || lesson == null) {
+            return Optional.empty();
+        }
+        Level studentLevel = levelOfStudent(existingStudent);
+        Level lessonLevel = levelOfLesson(existingLesson);
+        if (studentLevel.equals(lessonLevel)) {
+            return Optional.empty();
+        }
+        Name studentName = student instanceof NewStudent newStudent
+                ? newStudent.name()
+                : existingStudent.orElseThrow().getName();
+        return Optional.of(String.format(MESSAGE_NOTE_LEVEL_MISMATCH, studentName, studentLevel, lessonLevel));
+    }
+
+    /**
+     * Throws if the lesson is new and its timeslot clashes with an existing lesson. The message names that lesson.
+     */
+    private void checkForClash(Model model) throws CommandException {
+        if (!(lesson instanceof NewLesson newLesson)) {
+            return;
+        }
+        Optional<Lesson> clash = model.findClash(newLesson.timeslot());
+        if (clash.isPresent()) {
+            Lesson other = clash.get();
+            throw new CommandException(String.format(MESSAGE_LESSON_CLASH, other.getId(), other.getSubject(),
+                    other.getTimeslot()));
+        }
+    }
+
+    /**
+     * Returns a note if the lesson is new and its fee is 0, in case the fee was left out by mistake.
+     */
+    private Optional<String> noteForFreeLesson() {
+        if (lesson instanceof NewLesson newLesson && newLesson.fee().isFree()) {
+            return Optional.of(MESSAGE_NOTE_FREE_LESSON);
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * Returns the student to enroll: the existing student, or the new student created in {@code model}.
+     */
+    private Student createStudentIfNew(Model model, Optional<Student> existingStudent) {
+        if (student instanceof NewStudent newStudent) {
+            return model.addStudent(newStudent.name(), newStudent.contact(), newStudent.level());
+        }
+        return existingStudent.orElseThrow();
+    }
+
+    /**
+     * Returns the lesson to join: the existing lesson, or the new lesson created in {@code model}.
+     */
+    private Lesson createLessonIfNew(Model model, Optional<Lesson> existingLesson) {
+        if (lesson instanceof NewLesson newLesson) {
+            return model.addLesson(newLesson.subject(), newLesson.level(), newLesson.timeslot(), newLesson.fee());
+        }
+        return existingLesson.orElseThrow();
+    }
+
+    private void enroll(Model model, Student studentToEnroll, Lesson lessonToJoin) {
+        model.enroll(studentToEnroll.getId(), lessonToJoin.getId());
+        assert model.isEnrolled(studentToEnroll.getId(), lessonToJoin.getId())
+                : "Student " + studentToEnroll.getId() + " should be enrolled in lesson " + lessonToJoin.getId();
+        logger.info("Enrolled student " + studentToEnroll.getId() + " in lesson " + lessonToJoin.getId());
+    }
+
+    /**
+     * Returns the success message, followed by each note on its own line.
+     */
+    private static String successMessage(Model model, Student enrolled, Lesson joined, List<String> notes) {
+        String success = String.format(MESSAGE_SUCCESS, enrolled.getName(), enrolled.getId(), joined.getSubject(),
+                joined.getId(), model.isPaid(enrolled.getId()) ? PAID : UNPAID);
+        return withNotes(success, notes);
+    }
+
+    /**
+     * Returns {@code message}, followed by each note on its own line.
+     */
+    private static String withNotes(String message, List<String> notes) {
+        List<String> lines = new ArrayList<>();
+        lines.add(message);
+        lines.addAll(notes);
+        return String.join("\n", lines);
+    }
+
+    /**
+     * Returns a description of what the command refers to, for the log. It has IDs only, never names or contacts.
+     */
+    private String describeReferences() {
+        String studentDescription = student == null ? "no student"
+                : student instanceof ExistingStudent existing ? "student " + existing.id()
+                : "new student";
+        String lessonDescription = lesson == null ? "no lesson"
+                : lesson instanceof ExistingLesson existing ? "lesson " + existing.id()
+                : "new lesson";
+        return studentDescription + ", " + lessonDescription;
+    }
+
+    /**
+     * Returns the student this command refers to by ID, or an empty {@code Optional} if the student is new.
+     *
+     * @throws CommandException if the student is referred to by an ID that does not exist.
+     */
+    private Optional<Student> findExistingStudent(Model model) throws CommandException {
+        if (!(student instanceof ExistingStudent existing)) {
+            return Optional.empty();
+        }
+        return Optional.of(model.findStudent(existing.id()).orElseThrow(() ->
+                new CommandException(String.format(MESSAGE_STUDENT_NOT_FOUND, existing.id()))));
+    }
+
+    /**
+     * Returns the lesson this command refers to by ID, or an empty {@code Optional} if the lesson is new.
+     *
+     * @throws CommandException if the lesson is referred to by an ID that does not exist.
+     */
+    private Optional<Lesson> findExistingLesson(Model model) throws CommandException {
+        if (!(lesson instanceof ExistingLesson existing)) {
+            return Optional.empty();
+        }
+        return Optional.of(model.findLesson(existing.id()).orElseThrow(() ->
+                new CommandException(String.format(MESSAGE_LESSON_NOT_FOUND, existing.id()))));
+    }
+
+    /**
+     * Throws if a new student or a new lesson already exists, or if the student is already enrolled in the lesson.
+     */
+    private void checkForDuplicates(Model model, Optional<Student> existingStudent, Optional<Lesson> existingLesson)
+            throws CommandException {
+        checkNoDuplicateStudent(model);
+        checkNoDuplicateLesson(model);
+        checkNotAlreadyEnrolled(model, existingStudent, existingLesson);
+    }
+
+    private void checkNoDuplicateStudent(Model model) throws CommandException {
+        if (!(student instanceof NewStudent newStudent)) {
+            return;
+        }
+        Optional<Student> duplicate = model.findDuplicateStudent(newStudent.name(), newStudent.contact());
+        if (duplicate.isPresent()) {
+            throw new CommandException(String.format(MESSAGE_DUPLICATE_STUDENT, duplicate.get().getId()));
+        }
+    }
+
+    private void checkNoDuplicateLesson(Model model) throws CommandException {
+        if (!(lesson instanceof NewLesson newLesson)) {
+            return;
+        }
+        Optional<Lesson> duplicate =
+                model.findIdenticalLesson(newLesson.subject(), newLesson.level(), newLesson.timeslot());
+        if (duplicate.isPresent()) {
+            throw new CommandException(String.format(MESSAGE_DUPLICATE_LESSON, duplicate.get().getId()));
+        }
+    }
+
+    /**
+     * Throws if the student is already enrolled in the lesson, which is only possible when both already exist.
+     */
+    private void checkNotAlreadyEnrolled(Model model, Optional<Student> existingStudent,
+            Optional<Lesson> existingLesson) throws CommandException {
+        if (existingStudent.isPresent() && existingLesson.isPresent()
+                && model.isEnrolled(existingStudent.get().getId(), existingLesson.get().getId())) {
+            throw new CommandException(MESSAGE_ALREADY_ENROLLED);
+        }
+    }
+
+    /**
+     * Returns the student's level: the stored level of an existing student, or the level given for a new one.
+     */
+    private Level levelOfStudent(Optional<Student> existingStudent) {
+        return student instanceof NewStudent newStudent
+                ? newStudent.level()
+                : existingStudent.orElseThrow().getLevel();
+    }
+
+    /**
+     * Returns the lesson's level: the stored level of an existing lesson, or the level given for a new one.
+     */
+    private Level levelOfLesson(Optional<Lesson> existingLesson) {
+        return lesson instanceof NewLesson newLesson
+                ? newLesson.level()
+                : existingLesson.orElseThrow().getLevel();
     }
 
     @Override
@@ -67,17 +398,83 @@ public class AddCommand extends Command {
         }
 
         // instanceof handles nulls
-        if (!(other instanceof AddCommand otherAddCommand)) {
+        if (!(other instanceof AddCommand otherCommand)) {
             return false;
         }
 
-        return toAdd.equals(otherAddCommand.toAdd);
+        return Objects.equals(student, otherCommand.student) && Objects.equals(lesson, otherCommand.lesson);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(student, lesson);
     }
 
     @Override
     public String toString() {
         return new ToStringBuilder(this)
-                .add("toAdd", toAdd)
+                .add("student", student)
+                .add("lesson", lesson)
                 .toString();
+    }
+
+    /**
+     * Thrown when an existing student or lesson is given on its own. Its message names the student, so it is not
+     * logged.
+     */
+    private static class OtherSideNeededException extends CommandException {
+        OtherSideNeededException(String message) {
+            super(message);
+        }
+    }
+
+    /**
+     * The student an {@code add} command refers to: an existing student by ID, or a new student with their details.
+     */
+    public sealed interface StudentRef permits ExistingStudent, NewStudent { }
+
+    /**
+     * An existing student, referred to by ID.
+     */
+    public record ExistingStudent(StudentId id) implements StudentRef {
+        /** Creates a reference to the student with the given ID. */
+        public ExistingStudent {
+            requireNonNull(id);
+        }
+    }
+
+    /**
+     * A student who does not exist yet, with the details to create them with.
+     */
+    public record NewStudent(Name name, Contact contact, Level level) implements StudentRef {
+        /** Creates the details of a new student. */
+        public NewStudent {
+            requireAllNonNull(name, contact, level);
+        }
+    }
+
+    /**
+     * The lesson an {@code add} command refers to: an existing lesson by ID, or a new lesson with its details.
+     */
+    public sealed interface LessonRef permits ExistingLesson, NewLesson { }
+
+    /**
+     * An existing lesson, referred to by ID.
+     */
+    public record ExistingLesson(LessonId id) implements LessonRef {
+        /** Creates a reference to the lesson with the given ID. */
+        public ExistingLesson {
+            requireNonNull(id);
+        }
+    }
+
+    /**
+     * A lesson that does not exist yet, with the details to create it with.
+     */
+    public record NewLesson(Subject subject, Level level, Timeslot timeslot, Fee fee) implements LessonRef {
+        /** Creates the details of a new lesson. */
+        public NewLesson {
+            requireAllNonNull(subject, level, timeslot, fee);
+        }
     }
 }

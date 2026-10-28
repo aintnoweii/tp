@@ -1,32 +1,44 @@
 package seedu.address.logic.parser;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static seedu.address.logic.Messages.MESSAGE_INVALID_COMMAND_FORMAT;
-import static seedu.address.logic.parser.CommandParserTestUtil.assertParseFailure;
-import static seedu.address.logic.parser.CommandParserTestUtil.assertParseSuccess;
-import static seedu.address.testutil.TypicalIndexes.INDEX_FIRST_PERSON;
+import static seedu.address.testutil.Assert.assertThrows;
 
 import org.junit.jupiter.api.Test;
 
 import seedu.address.logic.commands.DeleteCommand;
+import seedu.address.logic.parser.exceptions.ParseException;
+import seedu.address.model.lesson.LessonId;
+import seedu.address.model.student.StudentId;
 
-/**
- * As we are only doing white-box testing, our test cases do not cover path variations
- * outside of the DeleteCommand code. For example, inputs "1" and "1 abc" take the
- * same path through the DeleteCommand, and therefore we test only one of them.
- * The path variation for those two cases occurs inside the ParserUtil, and
- * therefore should be covered by the ParserUtilTest.
- */
-public class DeleteCommandParserTest {
+class DeleteCommandParserTest {
 
-    private DeleteCommandParser parser = new DeleteCommandParser();
+    private final DeleteCommandParser parser = new DeleteCommandParser();
 
     @Test
-    public void parse_validArgs_returnsDeleteCommand() {
-        assertParseSuccess(parser, "1", new DeleteCommand(INDEX_FIRST_PERSON));
+    void parse_validStudentAndLessonCommands() throws Exception {
+        assertEquals(new DeleteCommand(new StudentId(12)), parser.parse(" student 12 "));
+        assertEquals(new DeleteCommand(new LessonId(7)), parser.parse("LESSON 7"));
+        assertEquals(new DeleteCommand(new StudentId(12)), parser.parse("StUdEnT 0012"));
+        assertEquals(new DeleteCommand(new StudentId(12)), parser.parse("student 00000000000012"));
     }
 
     @Test
-    public void parse_invalidArgs_throwsParseException() {
-        assertParseFailure(parser, "a", String.format(MESSAGE_INVALID_COMMAND_FORMAT, DeleteCommand.MESSAGE_USAGE));
+    void parse_invalidFormat_throwsParseException() {
+        String expectedMessage = String.format(MESSAGE_INVALID_COMMAND_FORMAT, DeleteCommand.MESSAGE_USAGE);
+        String[] invalidInputs = {"", "teacher 12", "stu 12", "student", "12", "student 0",
+            "student -1", "student abc", "student 12 now", "student student 12", "lesson lesson 7"};
+
+        for (String input : invalidInputs) {
+            assertThrows(ParseException.class, expectedMessage, () -> parser.parse(input));
+        }
+    }
+
+    @Test
+    void parse_idTooLarge_reportsSpecificError() {
+        String expectedMessage = ParserUtil.MESSAGE_ID_TOO_LARGE;
+        assertThrows(ParseException.class, expectedMessage, () -> parser.parse("student 2147483648"));
+        assertThrows(ParseException.class, expectedMessage, () -> parser.parse("lesson 99999999999999999999"));
     }
 }
+

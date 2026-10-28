@@ -18,3 +18,171 @@
 .tooltip-text {
     -fx-text-fill: white;
 }
+
+.schedule-panel {
+    -fx-background-color: #292d32;
+}
+
+.schedule-title {
+    -fx-font-size: 22px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #f5f7fa;
+}
+
+.schedule-subtitle {
+    -fx-font-size: 12px;
+    -fx-text-fill: #b7c1ca;
+}
+
+.schedule-warning {
+    -fx-background-color: #654321;
+    -fx-background-radius: 5px;
+    -fx-padding: 7px;
+    -fx-text-fill: #fff2ce;
+}
+
+.schedule-scroll,
+.schedule-scroll .viewport {
+    -fx-background-color: transparent;
+}
+
+.schedule-day {
+    -fx-background-color: #383e45;
+    -fx-background-radius: 6px;
+    -fx-padding: 10px;
+}
+
+.schedule-today {
+    -fx-border-color: #50b5d2;
+    -fx-border-width: 2px;
+    -fx-border-radius: 6px;
+}
+
+.schedule-day-heading {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-border-width: 0 0 2 0;
+    -fx-padding: 0;
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #f5f7fa;
+}
+
+.schedule-day-heading:focused {
+    -fx-border-color: #8edaf1;
+}
+
+.schedule-day-scroll,
+.schedule-day-scroll .viewport {
+    -fx-background-color: transparent;
+}
+
+.schedule-timeline {
+    -fx-background-color: #343b42;
+}
+
+.schedule-hour-line {
+    -fx-background-color: #58636d;
+}
+
+.schedule-hour-label {
+    -fx-font-size: 11px;
+    -fx-text-fill: #b7c1ca;
+}
+
+.schedule-empty {
+    -fx-font-style: italic;
+    -fx-text-fill: #b7c1ca;
+}
+
+.schedule-lesson {
+    -fx-background-color: #314e60;
+    -fx-background-radius: 5px;
+    -fx-background-insets: 0;
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
+    -fx-text-fill: #ffffff;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-alignment: top-left;
+    -fx-padding: 4px 6px;
+    -fx-cursor: hand;
+}
+
+.schedule-lesson:hover,
+.schedule-lesson:focused {
+    -fx-background-color: #3e6479;
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
+    -fx-effect: dropshadow(gaussian, #8edaf1, 8, 0.3, 0, 0);
+}
+
+.schedule-short-lesson {
+    -fx-background-color: transparent;
+    -fx-padding: 2px 4px;
+}
+
+.schedule-short-lesson:hover,
+.schedule-short-lesson:focused {
+    -fx-background-color: transparent;
+    -fx-underline: true;
+}
+
+.schedule-short-span {
+    -fx-background-color: #6db5d8;
+}
+
+.schedule-short-span-overlap {
+    -fx-background-color: #ffb25f;
+}
+
+.schedule-short-overlap {
+    -fx-text-fill: #ffcf93;
+}
+
+.schedule-overlap,
+.schedule-overlap:focused {
+    -fx-border-color: #ffb25f;
+    -fx-border-width: 2px;
+    -fx-border-radius: 5px;
+}
+
+.schedule-details-dialog {
+    -fx-background-color: #292d32;
+}
+
+.schedule-details-content {
+    -fx-padding: 12px;
+}
+
+.schedule-details-heading {
+    -fx-font-size: 16px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #f5f7fa;
+}
+
+.schedule-details-scroll,
+.schedule-details-scroll .viewport {
+    -fx-background-color: transparent;
+}
+
+.schedule-details-card {
+    -fx-background-color: #383e45;
+    -fx-background-radius: 6px;
+    -fx-padding: 12px;
+}
+
+.schedule-details-card:focused {
+    -fx-effect: dropshadow(gaussian, #8edaf1, 8, 0.3, 0, 0);
+}
+
+.schedule-details-card-title {
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #ffffff;
+}
+
+.schedule-details-card-text {
+    -fx-font-size: 12px;
+    -fx-text-fill: #dce8ef;
+}

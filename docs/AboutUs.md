@@ -19,7 +19,7 @@ You can reach us at the email `seer[at]comp.nus.edu.sg`
 
 ### Shawn Kok
 
-<img src="images/shawnkok.png" width="200px">
+<img src="images/shawnkokxk.png" width="200px">
 
 [[github](http://github.com/ShawnKokXK)]
 [[portfolio](team/johndoe.md)]
@@ -31,11 +31,7 @@ You can reach us at the email `seer[at]comp.nus.edu.sg`
 
 <img src="images/yourhand29.png" width="200px">
 
-[[github](http://github.com/YourHand29)] 
-[[portfolio](team/johndoe.md)]
-
-* Role: Developer
-* Responsibilities: Data
+[[github](http://github.com/YourHand29)]
 
 ### Ang Ee Yang
 

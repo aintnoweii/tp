@@ -1,0 +1,219 @@
+package seedu.address.logic.commands;
+
+import static java.util.Objects.requireNonNull;
+import static seedu.address.commons.util.AppUtil.checkArgument;
+import static seedu.address.logic.Messages.MESSAGE_LESSON_NOT_FOUND;
+import static seedu.address.logic.Messages.MESSAGE_STUDENT_NOT_FOUND;
+
+import java.time.DayOfWeek;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+
+import seedu.address.commons.util.ToStringBuilder;
+import seedu.address.logic.commands.exceptions.CommandException;
+import seedu.address.model.ListView;
+import seedu.address.model.Model;
+import seedu.address.model.common.Level;
+import seedu.address.model.lesson.LessonId;
+import seedu.address.model.lesson.Subject;
+import seedu.address.model.lesson.Timeslot;
+import seedu.address.model.student.StudentId;
+
+/**
+ * Shows only the lessons of one student, only the students of one lesson, only the lessons on one day,
+ * only the students who are paid or unpaid for the current month, or only the lessons with a given subject,
+ * level, or both.
+ */
+public class FilterCommand extends Command {
+
+    public static final String COMMAND_WORD = "filter";
+
+    public static final String MESSAGE_USAGE = COMMAND_WORD + " student|lesson ID or " + COMMAND_WORD + " day DAY or "
+            + COMMAND_WORD + " paid|unpaid or " + COMMAND_WORD + " [l/SUBJECT] [llv/LESSON_LEVEL]";
+
+    public static final String MESSAGE_SHOWING_LESSONS = "Showing %1$d lesson(s) for student ID %2$s.";
+
+    public static final String MESSAGE_SHOWING_STUDENTS = "Showing %1$d student(s) for lesson ID %2$s.";
+
+    public static final String MESSAGE_SHOWING_LESSONS_ON_DAY = "Showing %1$d lesson(s) on %2$s.";
+
+    public static final String MESSAGE_SHOWING_LESSONS_MATCHING = "Showing %1$d lesson(s) with %2$s.";
+
+    public static final String MESSAGE_SHOWING_STUDENTS_BY_PAID_STATUS =
+            "Showing %1$d student(s) who are %2$s for the current month.";
+
+    /**
+     * Only one kind of filter is set: the student, the lesson, the day, the paid status, or the subject and
+     * level. When filtering by subject and level, either one or both may be set.
+     */
+    private final StudentId studentId;
+    private final LessonId lessonId;
+    private final DayOfWeek day;
+    private final Subject subject;
+    private final Level level;
+    private final Boolean paidStatus;
+
+    /**
+     * Creates a command that shows only the lessons the given student is enrolled in.
+     */
+    public FilterCommand(StudentId studentId) {
+        this.studentId = requireNonNull(studentId);
+        this.lessonId = null;
+        this.day = null;
+        this.subject = null;
+        this.level = null;
+        this.paidStatus = null;
+    }
+
+    /**
+     * Creates a command that shows only the students enrolled in the given lesson.
+     */
+    public FilterCommand(LessonId lessonId) {
+        this.studentId = null;
+        this.lessonId = requireNonNull(lessonId);
+        this.day = null;
+        this.subject = null;
+        this.level = null;
+        this.paidStatus = null;
+    }
+
+    /**
+     * Creates a command that shows only the lessons on the given day.
+     */
+    public FilterCommand(DayOfWeek day) {
+        this.studentId = null;
+        this.lessonId = null;
+        this.day = requireNonNull(day);
+        this.subject = null;
+        this.level = null;
+        this.paidStatus = null;
+    }
+
+    /**
+     * Creates a command that shows only the lessons with the given subject and level.
+     * Either one may be null to leave it out, but not both.
+     */
+    public FilterCommand(Subject subject, Level level) {
+        checkArgument(subject != null || level != null, "At least one of subject and level must be given.");
+        this.studentId = null;
+        this.lessonId = null;
+        this.day = null;
+        this.subject = subject;
+        this.level = level;
+        this.paidStatus = null;
+    }
+
+    /**
+     * Creates a command that shows only the students who are (or are not) paid for the current month.
+     */
+    public FilterCommand(boolean paidStatus) {
+        this.studentId = null;
+        this.lessonId = null;
+        this.day = null;
+        this.subject = null;
+        this.level = null;
+        this.paidStatus = paidStatus;
+    }
+
+    @Override
+    public CommandResult execute(Model model) throws CommandException {
+        requireNonNull(model);
+
+        if (studentId != null) {
+            if (model.findStudent(studentId).isEmpty()) {
+                throw new CommandException(String.format(MESSAGE_STUDENT_NOT_FOUND, studentId));
+            }
+
+            model.filterLessonsByStudent(studentId);
+            model.setListView(ListView.LESSONS);
+            return new CommandResult(String.format(MESSAGE_SHOWING_LESSONS, model.getLessonList().size(),
+                    studentId));
+        }
+
+        if (lessonId != null) {
+            if (model.findLesson(lessonId).isEmpty()) {
+                throw new CommandException(String.format(MESSAGE_LESSON_NOT_FOUND, lessonId));
+            }
+
+            model.filterStudentsByLesson(lessonId);
+            model.setListView(ListView.STUDENTS);
+            return new CommandResult(String.format(MESSAGE_SHOWING_STUDENTS, model.getStudentList().size(),
+                    lessonId));
+        }
+
+        if (day != null) {
+            model.filterLessonsByDay(day);
+            model.setListView(ListView.LESSONS);
+            return new CommandResult(String.format(MESSAGE_SHOWING_LESSONS_ON_DAY, model.getLessonList().size(),
+                    Timeslot.dayName(day)));
+        }
+
+        if (paidStatus != null) {
+            model.filterStudentsByPaidStatus(paidStatus);
+            model.setListView(ListView.STUDENTS);
+            return new CommandResult(String.format(MESSAGE_SHOWING_STUDENTS_BY_PAID_STATUS,
+                    model.getStudentList().size(), paidStatus ? "paid" : "unpaid"));
+        }
+
+        model.filterLessonsBySubjectAndLevel(subject, level);
+        model.setListView(ListView.LESSONS);
+        return new CommandResult(String.format(MESSAGE_SHOWING_LESSONS_MATCHING, model.getLessonList().size(),
+                describeSubjectAndLevel()));
+    }
+
+    /**
+     * Returns the subject and level being filtered by, e.g. "subject Mathematics and level Primary 6".
+     */
+    private String describeSubjectAndLevel() {
+        List<String> parts = new ArrayList<>();
+        if (subject != null) {
+            parts.add("subject " + subject);
+        }
+        if (level != null) {
+            parts.add("level " + level);
+        }
+        return String.join(" and ", parts);
+    }
+
+    @Override
+    public boolean isDataMutating() {
+        return false;
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        if (other == this) {
+            return true;
+        }
+
+        // instanceof handles nulls
+        if (!(other instanceof FilterCommand otherFilterCommand)) {
+            return false;
+        }
+
+        return Objects.equals(studentId, otherFilterCommand.studentId)
+                && Objects.equals(lessonId, otherFilterCommand.lessonId)
+                && Objects.equals(day, otherFilterCommand.day)
+                && Objects.equals(subject, otherFilterCommand.subject)
+                && Objects.equals(level, otherFilterCommand.level)
+                && Objects.equals(paidStatus, otherFilterCommand.paidStatus);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(studentId, lessonId, day, subject, level, paidStatus);
+    }
+
+    @Override
+    public String toString() {
+        return new ToStringBuilder(this)
+                .add("studentId", studentId)
+                .add("lessonId", lessonId)
+                .add("day", day)
+                .add("subject", subject)
+                .add("level", level)
+                .add("paidStatus", paidStatus)
+                .toString();
+    }
+}
